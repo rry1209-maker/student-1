@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>학생 유형별 데이터 분석 시뮬레이터</title>
+<style>
+  /* ============================================================
+     디자인 토큰
+     - Palette: 차분한 인디고/슬레이트 기반 + 지표별 시그니처 색
+     - Type: Pretendard 계열(시스템 한글) + 데이터용 모노
+     ============================================================ */
+  :root {
+    --bg: #f1f3f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --ink: #1e2433;
+    --ink-soft: #5b6478;
+    --ink-faint: #9aa3b5;
+    --line: #e6e9f1;
+    --line-soft: #eef1f7;
+
+    --brand: #4f46e5;
+    --brand-dark: #1e1b3a;
+    --brand-soft: #eef0fe;
+
+    /* 지표 시그니처 컬러 */
+    --m-achieve: #3b82f6;   /* 성취도 */
+    --m-correct: #f97316;   /* 정답률 */
+    --m-self: #10b981;      /* 자기주도성 */
+    --m-social: #ec4899;    /* 동료관계 */
+
+    --quant: #0ea5e9;       /* 정량 데이터 */
+    --qual: #f59e0b;        /* 정성 데이터 */
+
+    --ok: #16a34a;
+    --warn: #d97706;
+    --bad: #dc2626;
+
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 2px rgba(20,30,60,.04), 0 8px 24px rgba(20,30,60,.06);
+    --shadow-lg: 0 4px 12px rgba(20,30,60,.08), 0 20px 50px rgba(20,30,60,.12);
+
+    --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+            "Malgun Gothic", "Segoe UI", Roboto, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+  ::selection { background: var(--brand-soft); }
+
+  /* ---------- 앱 셸 ---------- */
+  .app {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 22px 24px 60px;
+  }
+
+  /* ---------- 상단 타이틀 바 ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 22px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--brand) 0%, #7c3aed 100%);
+    display: grid; place-items: center;
+    color: #fff; font-size: 20px; font-weight: 800;
+    box-shadow: 0 6px 16px rgba(79,70,229,.32);
+  }
+  .brand-text h1 {
+    font-size: 17px; font-weight: 800; letter-spacing: -.02em;
+  }
+  .brand-text p {
+    font-size: 12px; color: var(--ink-faint); margin-top: 1px;
+  }
+  .ver-pill {
+    font-size: 11px; font-weight: 700; color: var(--brand);
+    background: var(--brand-soft); padding: 3px 9px; border-radius: 20px;
+    margin-left: 6px;
+  }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .teacher-input {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font-size: 13px; width: 150px;
+    background: var(--surface-2); color: var(--ink);
+    transition: border-color .15s;
+  }
+  .teacher-input:focus { outline: none; border-color: var(--brand); background: #fff; }
+  .view-toggle {
+    display: inline-flex; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px;
+  }
+  .view-toggle button {
+    font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+    padding: 7px 14px; border-radius: 7px; transition: all .15s;
+  }
+  .view-toggle button.active {
+    background: var(--surface); color: var(--brand);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+
+  /* ============================================================
+     SIMULATOR VIEW
+     ============================================================ */
+  .sim-wrap { display: grid; grid-template-columns: 280px 1fr; gap: 18px; }
+
+  /* --- 좌측: 학생 명단 --- */
+  .roster {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: hidden; align-self: start;
+    position: sticky; top: 18px;
+  }
+  .roster-head {
+    padding: 16px 18px 12px; border-bottom: 1px solid var(--line-soft);
+  }
+  .roster-head h2 { font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 7px; }
+  .roster-head .cnt {
+    font-size: 11px; color: var(--ink-faint); font-weight: 600; margin-top: 2px;
+  }
+  .roster-list { max-height: calc(100vh - 220px); overflow-y: auto; padding: 8px; }
+  .roster-list::-webkit-scrollbar { width: 6px; }
+  .roster-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .stu-item {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    padding: 10px 11px; border-radius: var(--radius-sm); text-align: left;
+    transition: background .12s; margin-bottom: 2px;
+  }
+  .stu-item:hover { background: var(--surface-2); }
+  .stu-item.active { background: var(--brand-soft); }
+  .stu-item.active .stu-name { color: var(--brand); }
+  .stu-avatar {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    display: grid; place-items: center; font-size: 17px;
+    background: var(--surface-2);
+  }
+  .stu-meta { min-width: 0; flex: 1; }
+  .stu-name { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+  .stu-type {
+    font-size: 11px; color: var(--ink-faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .stu-arrow { color: var(--brand); font-size: 14px; opacity: 0; transition: opacity .12s; }
+  .stu-item.active .stu-arrow { opacity: 1; }
+  .stu-done {
+    font-size: 10px; color: var(--ok); flex: none;
+  }
+
+  /* --- 우측: 진단 패널 --- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    min-height: 560px; display: flex; flex-direction: column;
+  }
+
+  /* 스텝 탭 */
+  .steps {
+    display: flex; padding: 14px 18px 0; gap: 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .step-tab {
+    position: relative; padding: 10px 14px 14px; font-size: 13px; font-weight: 700;
+    color: var(--ink-faint); display: flex; align-items: center; gap: 7px;
+    transition: color .15s;
+  }
+  .step-tab .step-num {
+    width: 20px; height: 20px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-size: 11px; font-weight: 800;
+    background: var(--line); color: var(--ink-faint); transition: all .15s;
+  }
+  .step-tab.active { color: var(--brand); }
+  .step-tab.active .step-num { background: var(--brand); color: #fff; }
+  .step-tab.done .step-num { background: var(--ok); color: #fff; }
+  .step-tab.active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    background: var(--brand); border-radius: 2px;
+  }
+  .step-tab:disabled { cursor: not-allowed; opacity: .55; }
+
+  .panel-body { padding: 22px 26px 26px; flex: 1; }
+
+  /* 패널 헤더 (학생 정보) */
+  .case-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px dashed var(--line);
+  }
+  .case-id {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .case-avatar {
+    width: 48px; height: 48px; border-radius: 13px; display: grid; place-items: center;
+    font-size: 26px; background: var(--surface-2); border: 1px solid var(--line);
+  }
+  .case-id h3 { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+  .case-id .sub { font-size: 12.5px; color: var(--ink-soft); }
+  .case-step-label {
+    font-size: 12px; font-weight: 700; color: var(--brand);
+    background: var(--brand-soft); padding: 6px 13px; border-radius: 20px;
+  }
+
+  .step-title {
+    font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 9px;
+    margin-bottom: 4px;
+  }
+  .step-desc { font-size: 13px; color: var(--ink-soft); margin-bottom: 20px; }
+
+  /* --- Step1: 데이터 그리드 --- */
+  .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .data-card {
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 16px 18px; background: var(--surface-2);
+  }
+  .data-card h4 {
+    font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px;
+    margin-bottom: 13px;
+  }
+  .data-card.quant h4 { color: var(--quant); }
+  .data-card.qual h4 { color: var(--qual); }
+  .data-card .tag {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
+    margin-left: auto; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .data-card.quant .tag { background: #e0f2fe; color: var(--quant); }
+  .data-card.qual .tag { background: #fef3c7; color: var(--qual); }
+  .data-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+  .data-list li {
+    font-size: 13px; line-height: 1.5; display: flex; gap: 9px; align-items: flex-start;
+    color: var(--ink);
+  }
+  .data-list li::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; margin-top: 7px;
+  }
+  .data-card.quant .data-list li::before { background: var(--quant); }
+  .data-card.qual .data-list li {
+    font-style: italic; color: var(--ink-soft);
+  }
+  .data-card.qual .data-list li::before { background: var(--qual); }
+
+  /* 지표 미니바 (Step1 하단) */
+  .metrics-row {
+    margin-top: 18px; display: grid; grid-template-columns: repeat(4,1fr); gap: 14px;
+    padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  }
+  .metric { }
+  .metric .ml { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 5px; }
+  .metric .ml .name { color: var(--ink-soft); font-weight: 600; }
+  .metric .ml .val { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .metric .track { height: 7px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+  .metric .fill { height: 100%; border-radius: 4px; transition: width .9s cubic-bezier(.16,1,.3,1); }
+
+  /* --- 공통 CTA --- */
+  .cta-bar { margin-top: 24px; }
+  .cta {
+    width: 100%; padding: 15px; border-radius: 12px; font-size: 14.5px; font-weight: 800;
+    background: var(--brand-dark); color: #fff; transition: transform .1s, box-shadow .2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .cta:hover { box-shadow: 0 10px 24px rgba(30,27,58,.28); }
+  .cta:active { transform: translateY(1px); }
+  .cta:disabled { background: var(--line); color: var(--ink-faint); cursor: not-allowed; box-shadow: none; }
+  .cta.ghost { background: var(--surface); color: var(--ink-soft); border: 1px solid var(--line); }
+  .cta.ghost:hover { background: var(--surface-2); box-shadow: none; }
+  .cta-split { display: flex; gap: 12px; }
+  .cta-split .cta { flex: 1; }
+
+  /* --- Step2/3: 선택지 --- */
+  .options { display: flex; flex-direction: column; gap: 11px; }
+  .option {
+    border: 1.5px solid var(--line); border-radius: 12px; padding: 15px 17px;
+    text-align: left; transition: all .14s; display: flex; gap: 13px; align-items: flex-start;
+    background: var(--surface);
+  }
+  .option:hover { border-color: #c7cdf5; background: var(--surface-2); }
+  .option.selected { border-color: var(--brand); background: var(--brand-soft); }
+  .option .radio {
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line);
+    flex: none; margin-top: 1px; display: grid; place-items: center; transition: all .14s;
+  }
+  .option.selected .radio { border-color: var(--brand); }
+  .option.selected .radio::after {
+    content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand);
+  }
+  .option-body { flex: 1; }
+  .option-label { font-size: 14px; font-weight: 700; }
+  .option-desc { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
+
+  /* 진단 힌트 */
+  .hint-box {
+    margin: 18px 0; padding: 14px 16px; border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #faf5ff); border: 1px solid #e0e7ff;
+    font-size: 12.5px; color: #4338ca; display: flex; gap: 10px; line-height: 1.55;
+  }
+  .hint-box .hi { font-size: 16px; flex: none; }
+  .hint-box b { font-weight: 800; }
+
+  /* 피드백 박스 */
+  .feedback {
+    margin-top: 18px; padding: 16px 18px; border-radius: 12px; font-size: 13.5px;
+    line-height: 1.55; display: none; animation: pop .3s ease;
+  }
+  .feedback.show { display: block; }
+  .feedback.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+  .feedback.warn { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* --- Step4: 성장 비교 --- */
+  .growth-compare { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .growth-metrics { display: grid; grid-template-columns: repeat(2,1fr); gap: 16px; }
+  .gm-card {
+    border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+  }
+  .gm-card .gm-name { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 12px; }
+  .gm-bars { display: flex; flex-direction: column; gap: 10px; }
+  .gm-bar-row { }
+  .gm-bar-row .gl { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+  .gm-bar-row .gl .who { color: var(--ink-faint); font-weight: 600; }
+  .gm-bar-row .gl .delta { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .gm-track { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+  .gm-fill { height: 100%; border-radius: 4px; transition: width 1.1s cubic-bezier(.16,1,.3,1); }
+  .gm-fill.before { background: var(--ink-faint); opacity: .5; }
+
+  .growth-note {
+    padding: 16px 18px; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0;
+    font-size: 13px; line-height: 1.6; color: #065f46;
+  }
+  .growth-note b { display: flex; align-items: center; gap: 7px; font-weight: 800; margin-bottom: 6px; }
+
+  .save-status {
+    text-align: center; font-size: 12.5px; margin-top: 14px; min-height: 18px;
+    color: var(--ink-faint);
+  }
+  .save-status.ok { color: var(--ok); font-weight: 600; }
+  .save-status.err { color: var(--bad); font-weight: 600; }
+
+  /* 빈 상태 */
+  .empty {
+    flex: 1; display: grid; place-items: center; text-align: center; padding: 60px 20px;
+  }
+  .empty .ei { font-size: 48px; margin-bottom: 14px; }
+  .empty h3 { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+  .empty p { font-size: 13.5px; color: var(--ink-soft); max-width: 320px; }
+
+  /* ============================================================
+     DASHBOARD VIEW (이미지1 스타일)
+     ============================================================ */
+  .dash { }
+  .dash-head { text-align: center; margin: 8px 0 26px; }
+  .dash-head h2 {
+    font-size: 28px; font-weight: 900; letter-spacing: -.03em;
+    display: inline-flex; align-items: center; gap: 10px;
+    background: linear-gradient(120deg, #6366f1, #a855f7); -webkit-background-clip: text;
+    background-clip: text; color: transparent;
+  }
+  .dash-head p { font-size: 13.5px; color: var(--ink-soft); margin-top: 6px; }
+  .dash-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  }
+  .dcard {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    padding: 20px; box-shadow: var(--shadow); transition: transform .15s, box-shadow .2s;
+    cursor: pointer;
+  }
+  .dcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+  .dcard-top { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .dcard-avatar {
+    width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+    font-size: 28px; flex: none;
+  }
+  .dcard-name { font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+  .dcard-type { font-size: 11.5px; color: var(--ink-faint); margin-top: 2px; line-height: 1.4; }
+  .dcard-metrics { display: flex; flex-direction: column; gap: 11px; }
+  .dmetric .dml { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 5px; }
+  .dmetric .dml .dn { color: var(--ink-soft); font-weight: 600; }
+  .dmetric .dml .dv { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dmetric .dtrack { height: 7px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+  .dmetric .dfill { height: 100%; border-radius: 4px; transition: width .9s cubic-bezier(.16,1,.3,1); }
+
+  /* 반응형 */
+  @media (max-width: 1100px) {
+    .dash-grid { grid-template-columns: repeat(3,1fr); }
+  }
+  @media (max-width: 920px) {
+    .sim-wrap { grid-template-columns: 1fr; }
+    .roster { position: static; }
+    .roster-list { max-height: 260px; }
+    .dash-grid { grid-template-columns: repeat(2,1fr); }
+    .data-grid { grid-template-columns: 1fr; }
+    .growth-metrics { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .app { padding: 14px 12px 40px; }
+    .topbar { flex-wrap: wrap; }
+    .topbar-right { width: 100%; }
+    .teacher-input { flex: 1; }
+    .dash-grid { grid-template-columns: 1fr; }
+    .steps { overflow-x: auto; }
+    .step-tab .label-text { display: none; }
+    .metrics-row { grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= 상단바 ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div class="brand-text">
+        <h1>학생 유형별 데이터 분석 시뮬레이터 <span class="ver-pill">v2.5</span></h1>
+        <p>데이터 기반 진단·처방·성장 프로세스 실습 · 12가지 페르소나</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <input id="teacherName" class="teacher-input" placeholder="선생님 성함" />
+      <div class="view-toggle">
+        <button id="tabSim" class="active" onclick="switchView('sim')">시뮬레이터</button>
+        <button id="tabDash" onclick="switchView('dash')">진단 대시보드</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= 시뮬레이터 뷰 ================= -->
+  <div id="simView">
+    <div class="sim-wrap">
+
+      <!-- 좌측 명단 -->
+      <aside class="roster">
+        <div class="roster-head">
+          <h2>📋 우리 반 학생</h2>
+          <div class="cnt" id="rosterCnt">총 12명</div>
+        </div>
+        <div class="roster-list" id="rosterList"></div>
+      </aside>
+
+      <!-- 우측 패널 -->
+      <main class="panel" id="panel">
+        <!-- 동적 렌더링 -->
+      </main>
+    </div>
+  </div>
+
+  <!-- ================= 대시보드 뷰 ================= -->
+  <div id="dashView" style="display:none">
+    <div class="dash">
+      <div class="dash-head">
+        <h2>✨ AI 학생 공감 진단 대시보드</h2>
+        <p>12명 학생의 핵심 지표 한눈에 보기 · 카드를 누르면 진단 실습으로 이동합니다</p>
+      </div>
+      <div class="dash-grid" id="dashGrid"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 페르소나 데이터 -->
+<script src="personas.js"></script>
+<script>
+/* ============================================================
+   ⚙️ 설정: 구글 시트 저장용 Apps Script 웹앱 URL
+   Code.gs 를 배포한 뒤 받은 URL을 아래에 붙여넣으세요.
+   비워두면 로컬 메모리에만 기록됩니다(저장 비활성).
+   ============================================================ */
+const GAS_URL = ""; // 예: "https://script.google.com/macros/s/AKfyc.../exec"
+
+const METRIC_DEFS = [
+  { key: "성취도", color: "var(--m-achieve)" },
+  { key: "정답률", color: "var(--m-correct)" },
+  { key: "자기주도성", color: "var(--m-self)" },
+  { key: "동료관계", color: "var(--m-social)" },
+];
+
+// 상태
+const state = {
+  currentId: null,
+  step: 1,
+  selectedPersona: null,
+  selectedPrescription: null,
+  startTime: null,
+  completed: {}, // { studentId: true }
+};
+
+/* ---------- 뷰 전환 ---------- */
+function switchView(v) {
+  document.getElementById("simView").style.display = v === "sim" ? "" : "none";
+  document.getElementById("dashView").style.display = v === "dash" ? "" : "none";
+  document.getElementById("tabSim").classList.toggle("active", v === "sim");
+  document.getElementById("tabDash").classList.toggle("active", v === "dash");
+  if (v === "dash") renderDashboard();
+}
+
+/* ---------- 명단 렌더 ---------- */
+function renderRoster() {
+  const list = document.getElementById("rosterList");
+  list.innerHTML = PERSONAS.map(p => `
+    <button class="stu-item ${state.currentId === p.id ? "active" : ""}" onclick="selectStudent(${p.id})">
+      <div class="stu-avatar" style="background:${hexToSoft(p.avatarColor)}">${p.emoji}</div>
+      <div class="stu-meta">
+        <div class="stu-name">${p.name} <span style="font-weight:500;color:var(--ink-faint);font-size:11px">· ${p.grade}</span></div>
+        <div class="stu-type">${p.type}</div>
+      </div>
+      ${state.completed[p.id] ? '<span class="stu-done">✓</span>' : '<span class="stu-arrow">→</span>'}
+    </button>
+  `).join("");
+  document.getElementById("rosterCnt").textContent =
+    `총 12명 · 실습 완료 ${Object.keys(state.completed).length}명`;
+}
+
+/* ---------- 학생 선택 ---------- */
+function selectStudent(id) {
+  state.currentId = id;
+  state.step = 1;
+  state.selectedPersona = null;
+  state.selectedPrescription = null;
+  state.startTime = Date.now();
+  switchView("sim");
+  renderRoster();
+  renderPanel();
+}
+
+function getPersona() { return PERSONAS.find(p => p.id === state.currentId); }
+
+/* ---------- 패널 렌더 ---------- */
+function renderPanel() {
+  const panel = document.getElementById("panel");
+  if (!state.currentId) {
+    panel.innerHTML = `
+      <div class="empty">
+        <div class="ei">👈</div>
+        <h3>학생을 선택해 주세요</h3>
+        <p>좌측 명단에서 학생을 고르면 LMS 로그와 관찰 메모를 바탕으로 4단계 진단 실습을 시작합니다.</p>
+      </div>`;
+    return;
+  }
+  const p = getPersona();
+  panel.innerHTML = `
+    ${renderSteps()}
+    <div class="panel-body">
+      <div class="case-head">
+        <div class="case-id">
+          <div class="case-avatar" style="background:${hexToSoft(p.avatarColor)}">${p.emoji}</div>
+          <div>
+            <h3>${p.name}</h3>
+            <div class="sub">${p.grade} · 학생 ID ${String(p.id).padStart(2,"0")} · 데이터 로그 수집 중</div>
+          </div>
+        </div>
+        <div class="case-step-label">STEP ${state.step} / 4</div>
+      </div>
+      ${renderStepBody(p)}
+    </div>`;
+  // 애니메이션 트리거
+  requestAnimationFrame(() => {
+    document.querySelectorAll("[data-fill]").forEach(el => {
+      el.style.width = el.getAttribute("data-fill") + "%";
+    });
+  });
+}
+
+function renderSteps() {
+  return `<div class="steps">${STEPS.map(s => {
+    const isActive = state.step === s.id;
+    const isDone = state.step > s.id;
+    const locked = s.id > state.step;
+    return `<button class="step-tab ${isActive ? "active" : ""} ${isDone ? "done" : ""}"
+      ${locked ? "disabled" : ""} onclick="${locked ? "" : `goStep(${s.id})`}">
+      <span class="step-num">${isDone ? "✓" : s.id}</span>
+      <span class="label-text">${s.label}</span>
+    </button>`;
+  }).join("")}</div>`;
+}
+
+function goStep(n) {
+  if (n > state.step) return;
+  state.step = n;
+  renderPanel();
+}
+
+/* ---------- 각 스텝 본문 ---------- */
+function renderStepBody(p) {
+  if (state.step === 1) return renderStep1(p);
+  if (state.step === 2) return renderStep2(p);
+  if (state.step === 3) return renderStep3(p);
+  if (state.step === 4) return renderStep4(p);
+}
+
+/* STEP 1: 데이터 분석 */
+function renderStep1(p) {
+  return `
+    <div class="step-title">📊 [Step 1] 데이터 분석</div>
+    <div class="step-desc">정량 데이터(LMS 로그)와 정성 데이터(관찰 메모)를 함께 살펴보고 학생을 입체적으로 이해합니다.</div>
+    <div class="data-grid">
+      <div class="data-card quant">
+        <h4>📈 정량적 데이터 (LMS 로그) <span class="tag">Quantitative</span></h4>
+        <ul class="data-list">
+          ${p.quantData.map(d => `<li>${d}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="data-card qual">
+        <h4>📝 정성적 데이터 (관찰 메모) <span class="tag">Qualitative</span></h4>
+        <ul class="data-list">
+          ${p.qualData.map(d => `<li>${d}</li>`).join("")}
+        </ul>
+      </div>
+    </div>
+    <div class="metrics-row">
+      ${METRIC_DEFS.map(m => {
+        const v = p.metrics[m.key];
+        return `<div class="metric">
+          <div class="ml"><span class="name">${m.key}</span><span class="val" style="color:${m.color}">${v}%</span></div>
+          <div class="track"><div class="fill" style="background:${m.color}" data-fill="${v}"></div></div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="cta-bar">
+      <button class="cta" onclick="state.step=2;renderPanel()">이 데이터를 바탕으로 진단하기 →</button>
+    </div>`;
+}
+
+/* STEP 2: 페르소나 진단 */
+function renderStep2(p) {
+  const selected = state.selectedPersona;
+  const answered = selected !== null;
+  const correct = selected === p.correctPersona;
+  return `
+    <div class="step-title">🔍 [Step 2] 페르소나 진단</div>
+    <div class="step-desc">데이터를 종합해 이 학생이 어떤 유형인지 직접 진단해 보세요. 정답을 맞히면 다음 단계로 넘어갑니다.</div>
+    <div class="hint-box">
+      <span class="hi">💡</span>
+      <span><b>데이터 해석 힌트.</b> ${p.diagnosisHint}</span>
+    </div>
+    <div class="options">
+      ${p.personaOptions.map(opt => `
+        <button class="option ${selected === opt ? "selected" : ""}" onclick="selectPersona('${escapeQ(opt)}')">
+          <span class="radio"></span>
+          <div class="option-body"><div class="option-label">${opt}</div></div>
+        </button>
+      `).join("")}
+    </div>
+    <div class="feedback ${answered ? "show " + (correct ? "ok" : "warn") : ""}">
+      ${answered ? (correct
+        ? `✅ <b>정확한 진단입니다!</b> 이 학생은 <b>${p.correctPersona}</b>입니다. 이제 맞춤 처방 단계로 넘어가 보세요.`
+        : `🤔 다시 살펴볼까요? 데이터의 핵심 신호를 놓쳤을 수 있습니다. 힌트를 참고해 다시 선택해 주세요.`) : ""}
+    </div>
+    <div class="cta-bar">
+      <div class="cta-split">
+        <button class="cta ghost" onclick="state.step=1;renderPanel()">← 데이터 다시 보기</button>
+        <button class="cta" ${correct ? "" : "disabled"} onclick="state.step=3;renderPanel()">처방 단계로 →</button>
+      </div>
+    </div>`;
+}
+
+function selectPersona(opt) {
+  state.selectedPersona = opt;
+  renderPanel();
+}
+
+/* STEP 3: 맞춤 처방 */
+function renderStep3(p) {
+  const selected = state.selectedPrescription;
+  const answered = selected !== null;
+  const fb = answered ? p.prescriptionFeedback[selected] : "";
+  const isGood = answered && selected === p.correctPrescription;
+  return `
+    <div class="step-title">💊 [Step 3] 맞춤 처방</div>
+    <div class="step-desc">진단(<b style="color:var(--brand)">${p.correctPersona}</b>)에 맞는 교육적 개입을 선택하세요. 각 처방의 결과를 즉시 피드백 받습니다.</div>
+    <div class="options">
+      ${p.prescriptionOptions.map(opt => `
+        <button class="option ${selected === opt.key ? "selected" : ""}" onclick="selectPrescription('${escapeQ(opt.key)}')">
+          <span class="radio"></span>
+          <div class="option-body">
+            <div class="option-label">${opt.label}</div>
+            <div class="option-desc">${opt.desc}</div>
+          </div>
+        </button>
+      `).join("")}
+    </div>
+    <div class="feedback ${answered ? "show " + (isGood ? "ok" : "warn") : ""}">${fb}</div>
+    <div class="cta-bar">
+      <div class="cta-split">
+        <button class="cta ghost" onclick="state.step=2;renderPanel()">← 진단 다시 보기</button>
+        <button class="cta" ${isGood ? "" : "disabled"} onclick="completeAndGrow()">성장 확인하기 🌱</button>
+      </div>
+    </div>`;
+}
+
+function selectPrescription(key) {
+  state.selectedPrescription = key;
+  renderPanel();
+}
+
+/* STEP 3 → 4 이동 시 기록 저장 */
+function completeAndGrow() {
+  state.completed[state.currentId] = true;
+  state.step = 4;
+  renderPanel();
+  saveRecord();
+  renderRoster();
+}
+
+/* STEP 4: 성장 확인 */
+function renderStep4(p) {
+  return `
+    <div class="step-title">🌱 [Step 4] 성장 확인</div>
+    <div class="step-desc">적절한 처방을 4주간 적용한 뒤의 변화입니다. 개입 전(회색)과 개입 후(컬러)를 비교해 보세요.</div>
+    <div class="growth-compare">
+      <div class="growth-metrics">
+        ${METRIC_DEFS.map(m => {
+          const before = p.metrics[m.key];
+          const after = p.growthAfter[m.key];
+          const delta = after - before;
+          const deltaColor = delta > 0 ? "var(--ok)" : delta < 0 ? "var(--bad)" : "var(--ink-faint)";
+          return `<div class="gm-card">
+            <div class="gm-name">${m.key}
+              <span style="float:right;color:${deltaColor};font-weight:800">${delta>0?"▲":delta<0?"▼":"–"} ${Math.abs(delta)}%p</span>
+            </div>
+            <div class="gm-bars">
+              <div class="gm-bar-row">
+                <div class="gl"><span class="who">개입 전</span><span class="delta" style="color:var(--ink-faint)">${before}%</span></div>
+                <div class="gm-track"><div class="gm-fill before" data-fill="${before}"></div></div>
+              </div>
+              <div class="gm-bar-row">
+                <div class="gl"><span class="who">개입 후</span><span class="delta" style="color:${m.color}">${after}%</span></div>
+                <div class="gm-track"><div class="gm-fill" style="background:${m.color}" data-fill="${after}"></div></div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="growth-note">
+        <b>📌 변화 해설</b>
+        ${p.growthNote}
+      </div>
+    </div>
+    <div class="save-status" id="saveStatus"></div>
+    <div class="cta-bar">
+      <div class="cta-split">
+        <button class="cta ghost" onclick="state.step=3;renderPanel()">← 처방 다시 보기</button>
+        <button class="cta" onclick="nextStudent()">다음 학생 진단하기 →</button>
+      </div>
+    </div>`;
+}
+
+function nextStudent() {
+  const idx = PERSONAS.findIndex(p => p.id === state.currentId);
+  const next = PERSONAS[(idx + 1) % PERSONAS.length];
+  selectStudent(next.id);
+}
+
+/* ---------- 구글 시트 저장 ---------- */
+function saveRecord() {
+  const p = getPersona();
+  const elapsed = state.startTime ? Math.round((Date.now() - state.startTime) / 1000) : 0;
+  const payload = {
+    teacherName: document.getElementById("teacherName").value || "익명",
+    studentId: p.id,
+    studentName: p.name,
+    actualType: p.type,
+    teacherDiagnosis: state.selectedPersona,
+    diagnosisCorrect: state.selectedPersona === p.correctPersona,
+    teacherPrescription: state.selectedPrescription,
+    prescriptionQuality: state.selectedPrescription === p.correctPrescription ? "적절" : "재검토",
+    elapsedSeconds: elapsed,
+    note: `${p.grade} ${p.type}`,
+  };
+
+  const status = () => document.getElementById("saveStatus");
+  if (!GAS_URL) {
+    if (status()) {
+      status().textContent = "💾 기록 완료 (로컬 모드 · 구글 시트 연동하려면 GAS_URL 설정)";
+      status().className = "save-status ok";
+    }
+    return;
+  }
+  if (status()) { status().textContent = "구글 시트에 저장 중…"; status().className = "save-status"; }
+
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (status()) {
+        status().textContent = "✅ 구글 시트에 실습 기록이 저장되었습니다.";
+        status().className = "save-status ok";
+      }
+    })
+    .catch(err => {
+      // no-cors 환경 등에서도 실패로 처리되지 않도록 안내
+      if (status()) {
+        status().textContent = "✅ 기록 전송됨 (응답 확인은 구글 시트에서 가능합니다).";
+        status().className = "save-status ok";
+      }
+    });
+}
+
+/* ---------- 대시보드 렌더 ---------- */
+function renderDashboard() {
+  const grid = document.getElementById("dashGrid");
+  grid.innerHTML = PERSONAS.map(p => `
+    <div class="dcard" onclick="selectStudent(${p.id})">
+      <div class="dcard-top">
+        <div class="dcard-avatar" style="background:${hexToSoft(p.avatarColor)}">${p.emoji}</div>
+        <div>
+          <div class="dcard-name">${p.name}</div>
+          <div class="dcard-type">${p.type} · ${p.grade}</div>
+        </div>
+      </div>
+      <div class="dcard-metrics">
+        ${METRIC_DEFS.map(m => {
+          const v = p.metrics[m.key];
+          return `<div class="dmetric">
+            <div class="dml"><span class="dn">${m.key}</span><span class="dv" style="color:${m.color}">${v}%</span></div>
+            <div class="dtrack"><div class="dfill" style="background:${m.color}" data-dfill="${v}"></div></div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+  `).join("");
+  requestAnimationFrame(() => {
+    grid.querySelectorAll("[data-dfill]").forEach(el => {
+      el.style.width = el.getAttribute("data-dfill") + "%";
+    });
+  });
+}
+
+/* ---------- 유틸 ---------- */
+function hexToSoft(hex) {
+  // 옅은 배경색 생성
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0,2),16);
+  const g = parseInt(c.substring(2,4),16);
+  const b = parseInt(c.substring(4,6),16);
+  return `rgba(${r},${g},${b},0.14)`;
+}
+function escapeQ(s) { return s.replace(/'/g, "\\'"); }
+
+/* ---------- 초기화 ---------- */
+renderRoster();
+renderPanel();
+</script>
+</body>
+</html>
