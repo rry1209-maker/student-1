@@ -57,6 +57,9 @@ function doGet(e) {
  */
 function doPost(e) {
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({ status: "error", message: "전송된 데이터가 없습니다." });
+    }
     const data = JSON.parse(e.postData.contents);
     const sheet = getSheet();
 
